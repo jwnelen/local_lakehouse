@@ -78,9 +78,6 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
   user: "${AIRFLOW_UID:-50000}:0"
-  networks:
-    - default
-    - lakehouse-network
   depends_on:
     &airflow-common-depends-on
     redis:
@@ -337,8 +334,3 @@ services:
 
 volumes:
   postgres-db-volume:
-
-networks:
-  lakehouse-network:
-    name: lakehouse-network
-    driver: bridge

@@ -33,7 +33,7 @@ start_services() {
     
     # Step 3: Start Airflow orchestration services
     echo "Starting Airflow orchestration services..."
-    docker compose -f docker-compose-airflow.yaml up -d --build --force-recreate --remove-orphans
+    docker compose -f docker-compose-airflow.yaml up -d --build --force-recreate
     sleep 5
     
     echo "All services started successfully."
@@ -46,7 +46,7 @@ start_services() {
     echo ""
 
     # Initialize Trino with required schemas
-    # init_trino
+    init_trino
 
     # Initialize Airflow connections
     init_airflow_connections
@@ -61,6 +61,8 @@ init_trino() {
 
     # Execute the init.sql file inside the Trino coordinator container
     # This creates the landing, staging, and curated schemas in the Iceberg catalog
+    TRINO_CONTAINER=$(docker ps --filter "name=trino-coor" --format "{{.Names}}" | head -n 1)
+    
     docker exec -it trino-coordinator trino --catalog iceberg --file /etc/trino/init.sql
 
     echo "Schemas (landing, staging, curated) created in Trino Iceberg Catalog."
@@ -129,7 +131,7 @@ stop_services() {
     docker compose -f docker-compose-trino.yaml down -v
     
     echo "Stopping data lake services..."
-    docker compose -f docker-compose-lake.yaml down -v
+    docker compose -f docker-compose-lake.yaml down
     
     echo "All services stopped and volumes cleaned up."
     echo ""

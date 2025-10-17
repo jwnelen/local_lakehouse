@@ -29,10 +29,12 @@ create_dim_product = PostgresOperator(
     postgres_conn_id="postgres_serving",
     sql="""
     CREATE TABLE IF NOT EXISTS dim_product (
-        product_id INTEGER PRIMARY KEY,
+        product_key VARCHAR(255) PRIMARY KEY,
         product_name VARCHAR(255),
-        product_category VARCHAR(255),
-        product_subcategory VARCHAR(255),
+        product_sku VARCHAR(255),
+        product_color VARCHAR(255),
+        subcategory_name VARCHAR(255),
+        category_name VARCHAR(255),
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     TRUNCATE TABLE dim_product;
@@ -45,14 +47,16 @@ create_fact_sale = PostgresOperator(
     postgres_conn_id="postgres_serving",
     sql="""
     CREATE TABLE IF NOT EXISTS fact_sale (
-        sale_id INTEGER PRIMARY KEY,
-        product_id INTEGER,
-        territory_id INTEGER,
-        sale_date DATE,
-        quantity INTEGER,
-        revenue DECIMAL(15,2),
+        order_date TIMESTAMP,
+        order_number VARCHAR(255),
+        product_key VARCHAR(255),
+        country_key VARCHAR(255),
+        revenue DOUBLE PRECISION,
+        cost DOUBLE PRECISION,
+        profit DOUBLE PRECISION,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (product_id) REFERENCES dim_product(product_id)
+        PRIMARY KEY (order_number, product_key),
+        FOREIGN KEY (product_key) REFERENCES dim_product(product_key)
     );
     TRUNCATE TABLE fact_sale;
     """,
@@ -63,10 +67,10 @@ create_fact_sale = PostgresOperator(
 def export_table_to_postgres(source_table, target_table, **context):
     """Export data from Trino/Iceberg to PostgreSQL"""
 
-    # Trino connection
+    # Trino connection (requires user even without authentication)
     trino_engine = create_engine(
-        "trino://trino-coordinator:8080/iceberg/curated",
-        connect_args={"auth": None, "http_scheme": "http"},
+        "trino://lakehouse_user@trino-coordinator:8080/iceberg/curated",
+        connect_args={"http_scheme": "http"},
     )
 
     # PostgreSQL connection using Airflow connection
@@ -105,5 +109,4 @@ export_fact_sale = PythonOperator(
 )
 
 # Dependencies
-create_dim_product >> export_dim_product
-create_fact_sale >> export_fact_sale
+create_dim_product >> create_fact_sale >> export_dim_product >> export_fact_sale
