@@ -37,7 +37,22 @@ create_dim_product = PostgresOperator(
         category_name VARCHAR(255),
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
-    TRUNCATE TABLE dim_product;
+    TRUNCATE TABLE dim_product CASCADE;
+    """,
+    dag=dag,
+)
+
+create_dim_country = PostgresOperator(
+    task_id="create_dim_country_table",
+    postgres_conn_id="postgres_serving",
+    sql="""
+    CREATE TABLE IF NOT EXISTS dim_country (
+        country_key VARCHAR(255) PRIMARY KEY,
+        country VARCHAR(255),
+        continent VARCHAR(255),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    TRUNCATE TABLE dim_country CASCADE;
     """,
     dag=dag,
 )
@@ -56,7 +71,8 @@ create_fact_sale = PostgresOperator(
         profit DOUBLE PRECISION,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (order_number, product_key),
-        FOREIGN KEY (product_key) REFERENCES dim_product(product_key)
+        FOREIGN KEY (product_key) REFERENCES dim_product(product_key),
+        FOREIGN KEY (country_key) REFERENCES dim_country(country_key)
     );
     TRUNCATE TABLE fact_sale;
     """,
@@ -101,6 +117,13 @@ export_dim_product = PythonOperator(
     dag=dag,
 )
 
+export_dim_country = PythonOperator(
+    task_id="export_dim_country",
+    python_callable=export_table_to_postgres,
+    op_kwargs={"source_table": "dim_country", "target_table": "dim_country"},
+    dag=dag,
+)
+
 export_fact_sale = PythonOperator(
     task_id="export_fact_sale",
     python_callable=export_table_to_postgres,
@@ -109,4 +132,4 @@ export_fact_sale = PythonOperator(
 )
 
 # Dependencies
-create_dim_product >> create_fact_sale >> export_dim_product >> export_fact_sale
+create_dim_product >> create_dim_country >> create_fact_sale >> export_dim_product >> export_dim_country >> export_fact_sale
