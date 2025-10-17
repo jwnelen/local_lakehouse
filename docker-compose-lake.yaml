@@ -29,3 +29,30 @@ services:
       mc alias set batman http://localhost:9000 admin password;
       mc mb batman/local-lakehouse;
       tail -f /dev/null"
+  postgres:
+    image: postgres:16.10-alpine3.22
+    container_name: postgres_serving
+    environment:
+      POSTGRES_USER: lakehouse_user
+      POSTGRES_PASSWORD: lakehouse_pass
+      POSTGRES_DB: analytics_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres_init:/docker-entrypoint-initdb.d
+    networks:
+      - lakehouse-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lakehouse_user -d analytics_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  lakehouse-network:
+    name: lakehouse-network
+    driver: bridge
