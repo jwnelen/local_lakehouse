@@ -1,1 +1,8 @@
 apache-airflow[celery]==3.0.6
+apache-airflow-providers-postgres==5.10.0
+pandas
+sqlalchemy
+pyarrow
+psycopg2-binary
+trino
+minio

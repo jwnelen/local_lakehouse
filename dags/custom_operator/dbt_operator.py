@@ -1,4 +1,3 @@
-import subprocess
 from airflow.exceptions import AirflowException
 from airflow.sdk import BaseOperator
 from dbt.cli.main import dbtRunner, dbtRunnerResult
@@ -45,10 +44,27 @@ class DbtCoreOperator(BaseOperator):
             command_args.extend(["--vars", f"'{vars_string}'"])
 
         self.log.info("Executing dbt command: %s", " ".join(command_args))
-        
-        res: dbtRunnerResult = self.runner.invoke(command_args)
-        
+
+        try:
+            res: dbtRunnerResult = self.runner.invoke(command_args)
+        except Exception as exc:
+            raise AirflowException(f"dbt {self.dbt_command} command failed") from exc
+
+        res_success = getattr(res, "success", False)
+        res_exception = getattr(res, "exception", None)
+        res_result = getattr(res, "result", None)
+
+        if not res_success:
+            error_message = f"dbt {self.dbt_command} command failed"
+            if res_exception:
+                error_message = f"{error_message}: {res_exception}"
+            self.log.error(error_message)
+            raise AirflowException(error_message)
+
+        if res_result:
+            for r in res_result:
+                self.log.info("%s: %s", r.node.name, r.status)
+        else:
+            self.log.info("dbt command completed without a result set.")
+
         self.log.info("dbt command executed successfully.")
-        
-        for r in res.result:
-            print(f"{r.node.name}: {r.status}")

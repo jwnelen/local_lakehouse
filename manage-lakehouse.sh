@@ -33,7 +33,7 @@ start_services() {
     
     # Step 3: Start Airflow orchestration services
     echo "Starting Airflow orchestration services..."
-    docker compose -f docker-compose-airflow.yaml up -d
+    docker compose -f docker-compose-airflow.yaml up -d --build --force-recreate
     sleep 5
     
     echo "All services started successfully."
@@ -47,7 +47,10 @@ start_services() {
 
     # Initialize Trino with required schemas
     init_trino
-    
+
+    # Initialize Airflow connections
+    init_airflow_connections
+
     # Uncomment the line below if you want to automatically load seed data on startup
     # load_dbt_seed_data
 }
@@ -55,12 +58,48 @@ start_services() {
 # Function to initialize Trino with the required database schemas
 init_trino() {
     echo "Initializing Trino schemas..."
-    
+
     # Execute the init.sql file inside the Trino coordinator container
     # This creates the landing, staging, and curated schemas in the Iceberg catalog
-    docker exec -it trino-coordinator trino --catalog iceberg --file /etc/trino/init.sql
+    TRINO_CONTAINER=$(docker ps --filter "name=trino-coor" --format "{{.Names}}" | head -n 1)
     
+    docker exec -it trino-coordinator trino --catalog iceberg --file /etc/trino/init.sql
+
     echo "Schemas (landing, staging, curated) created in Trino Iceberg Catalog."
+    echo ""
+}
+
+# Function to initialize Airflow connections
+init_airflow_connections() {
+    echo "Initializing Airflow connections..."
+
+    # Wait a bit for Airflow scheduler to be fully ready
+    echo "Waiting for Airflow scheduler to be ready..."
+    sleep 5
+
+    # Create postgres_serving connection (connects to the postgres container from docker-compose-lake.yaml)
+    echo "Creating postgres_serving connection..."
+
+    # Find the actual scheduler container name (it may have a project prefix)
+    SCHEDULER_CONTAINER=$(docker ps --filter "name=scheduler" --format "{{.Names}}" | head -n 1)
+
+    if [ -z "$SCHEDULER_CONTAINER" ]; then
+        echo "  ERROR: Could not find Airflow scheduler container"
+        return 1
+    fi
+
+    echo "  Using container: $SCHEDULER_CONTAINER"
+
+    docker exec "$SCHEDULER_CONTAINER" airflow connections add 'postgres_serving' \
+        --conn-type 'postgres' \
+        --conn-host 'postgres_serving' \
+        --conn-schema 'analytics_db' \
+        --conn-login 'lakehouse_user' \
+        --conn-password 'lakehouse_pass' \
+        --conn-port 5432 \
+        || echo "  Connection 'postgres_serving' may already exist or failed to create"
+
+    echo "Airflow connections initialized successfully."
     echo ""
 }
 
@@ -92,7 +131,7 @@ stop_services() {
     docker compose -f docker-compose-trino.yaml down -v
     
     echo "Stopping data lake services..."
-    docker compose -f docker-compose-lake.yaml down -v
+    docker compose -f docker-compose-lake.yaml down
     
     echo "All services stopped and volumes cleaned up."
     echo ""
